@@ -145,6 +145,10 @@ class Monitor:
             self.log("Received Garbled message");
             return;
         
+        if isinstance(c, Alias):
+            self.log("Got alias command");
+            self._cmd_alias(c)
+        
         if isinstance(c, Touch):
             self.log("Got touch command");
             self._cmd_touch()
@@ -161,6 +165,15 @@ class Monitor:
             self.log("Got ping");
             self._cmd_ping(c)
     
+    def _cmd_alias(self, command):
+        # remove old alias.
+        if self.alias:
+            self.home.delete_alias(self.alias);
+        
+        self.alias = command.alias;
+        
+        self.home.validate_alias(self.id, self.alias);
+    
     def _cmd_touch(self):
         import datetime
         tp = self.home.path(Touch.FILENAME)
@@ -168,7 +181,7 @@ class Monitor:
         ft = open(tp, "a");
         ft.write("touched at %s by %s\n"%(datetime.datetime.now(), self.id));
         ft.close();
-
+    
     def _cmd_pollpid(self, c):
         f = self.home.open_fifo(c.id, "w");
         f.write(pickle.dumps(ResponsePid(self.pid)));

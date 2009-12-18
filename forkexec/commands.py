@@ -38,6 +38,10 @@ class Shutdown(MonitorCommand):
 class PollPid(MonitorCommand):
     pass;
 
+class Alias(MonitorCommand):
+    def __init__(self, alias):
+        self.alias = alias;
+
 class ResponsePid:
     def __init__(self, pid):
         self.pid = pid;

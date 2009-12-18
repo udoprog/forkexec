@@ -357,7 +357,12 @@ def cmd_alias(h, args):
     alias = args.pop();
 
     if not h.exists(id):
-        print "No such id:", id
+        print "Id does not exist:", id
         return;
     
-    h.validate_alias(id, alias);
+    m = Monitor(h, id);
+    
+    if m.send(commands.Alias(alias)):
+        print "Alias command sent:", id
+    else:
+        print "Unable to set alias:", id
