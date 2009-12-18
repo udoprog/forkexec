@@ -45,6 +45,7 @@ CMD_LIST=["list", "ls"]
 CMD_START=["spawn", "start", "run", "x"]
 CMD_STOP=["shutdown", "stop", "s"]
 CMD_CHECK=["check", "c"]
+CMD_CLEAN=["clean"]
 CMD_PID=["pid", "p"]
 CMD_DEFAULT=CMD_LIST
 
@@ -113,14 +114,23 @@ class HomeDir:
         """
         Open the main fifo for this monitor.
         """
-        
+
         path = self.run(fifoname);
+
+        if not self._isfifo(path):
+            raise ForkExecException("%s: is not a fifo"%(path));
         
         try:
             return open(path, mode);
         except OSError, e:
             raise ForkExecException("%s: %s"%(path, str(e)));
 
+    def _isfifo(self, path):
+        try:
+            return stat.S_ISFIFO(os.stat(path).st_mode);
+        except:
+            return False;
+    
     def validate_fifo(self, fifoname):
         path = self.run(fifoname);
         
@@ -128,7 +138,7 @@ class HomeDir:
             if not os.path.exists(path):
                 os.mkfifo(path);
             
-            if not stat.S_ISFIFO(os.stat(path).st_mode):
+            if not self._isfifo(path):
                 os.unlink(path);
                 os.mkfifo(path);
             
@@ -167,6 +177,13 @@ class HomeDir:
         
         if os.path.islink(path):
             os.unlink(path);
+    
+    def exists(self, id):
+        return os.path.exists(self.run(id));
+    
+    def clean(self, id):
+        if self.exists(id):
+            self.delete_fifo(id);
 
 class MonitorDaemon(Daemon):
     def run(self):
@@ -226,6 +243,8 @@ def main():
         cmd_pid(h, args);
     elif command in CMD_LIST:
         cmd_list(h, args);
+    elif command in CMD_CLEAN:
+        cmd_clean(h, args);
     else:
         print "No command"
     
@@ -242,8 +261,8 @@ def cmd_start(h, args):
     else:
         alias = None;
 
-    if not os.path.isfile(h.run(id)):
-        print "%s: %s"%(h.run(id), "does not exist, create it if you want to run the specific process")
+    if not os.path.isfile(h.inits(id)):
+        print "%s: %s"%(h.inits(id), "does not exist, create it if you want to run the specific process")
         sys.exit(1);
     
     print "Starting:", id
@@ -263,10 +282,16 @@ def cmd_stop(h, args):
     while len(args) > 0:
         i += 1;
         id = args.pop();
+
+        if not h.exists(id):
+            print "Does not exist (ignoring):", id
+            continue;
         
         print "Shutting down:", id
         m = Monitor(h, id);
-        m.send(commands.Shutdown());
+        if not m.send(commands.Shutdown()):
+            print "Unable to shutdown, cleaning id:", id
+            h.clean(id);
     
     if i == 0:
         print "No processes stopped"
@@ -277,22 +302,9 @@ def cmd_pid(h, args):
     else:
         sys.exit(1);
     
-    uid = str(uuid.uuid1());
-
-    path = h.run(uid)
-    os.mkfifo(path);
-
-    r = None;
-
-    try:
-        m = Monitor(h, id);
-        m.send(commands.PollPid(uid));
-        
-        f = h.open_fifo(path, "r");
-        r = pickle.loads(f.read())
-        f.close();
-    finally:
-        os.unlink(path);
+    m = Monitor(h, id);
+    r = m.communicate(commands.PollPid());
+    
     if r:
         print r.pid;
     else:
@@ -315,3 +327,21 @@ def cmd_list(h, args):
 
     if i == 0:
         print "No running processes";
+
+def cmd_clean(h, args):
+    i = 0;
+    for f in os.listdir(h.run()):
+        i += 1;
+        
+        m = Monitor(h, f);
+        r = m.communicate(commands.Ping());
+        
+        if r and isinstance(r, commands.Pong):
+            print "Got Pong:", f
+            continue;
+        
+        print "Timeout, removing:", f
+        h.clean(f);
+    
+    if i == 0:
+        print "Nothing to clean"

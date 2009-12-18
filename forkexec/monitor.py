@@ -17,13 +17,54 @@
 # author: John-John Tedro <johnjohn.tedro@gmail.com>
 #
 
+import sys
 import os
-import setproctitle
 import subprocess
-import datetime;
 import pickle
+import uuid
+import datetime
+
+import setproctitle
 
 from forkexec.commands import *
+
+import threading
+class TimeoutSender(threading.Thread):
+    def __init__(self, monitor, command):
+        threading.Thread.__init__(self);
+        self.monitor = monitor;
+        self.command = command;
+        self.error = None;
+    
+    def run(self):
+        try:
+            f = self.monitor.home.open_fifo(self.monitor.id, "w");
+            
+            try:
+                f.write(pickle.dumps(self.command));
+            finally:
+                f.close();
+        except Exception, e:
+            self.error = e;
+
+class TimeoutReader(threading.Thread):
+    def __init__(self, monitor, id):
+        threading.Thread.__init__(self);
+        self.monitor = monitor;
+        self.result = None;
+        self.error = None;
+        self.id = id;
+    
+    def run(self):
+        try:
+            f = self.monitor.home.open_fifo(self.id, "r");
+            
+            try:
+                self.result = pickle.loads(f.read());
+            finally:
+                f.close();
+        except Exception, e:
+            self.error = e;
 
 class Monitor:
     """
@@ -55,7 +96,7 @@ class Monitor:
     def log(self, *items):
         d_now = str( datetime.datetime.now() );
         
-        self.log_fd.write( "%s %s: %s\n"%( self.id, d_now, " ".join(items) ) );
+        self.log_fd.write( "%s %s: %s\n"%( self.id, d_now, " ".join([str(i) for i in items]) ) );
         self.log_fd.flush();
     
     def run(self):
@@ -95,7 +136,7 @@ class Monitor:
         fifo = self.home.run(self.id);
         
         self.home.delete_fifo(self.id);
-
+        
         if self.alias:
             self.home.delete_alias(self.alias);
     
@@ -115,6 +156,10 @@ class Monitor:
         if isinstance(c, Shutdown):
             self.log("Got command to shut down");
             self.running = False;
+        
+        if isinstance(c, Ping):
+            self.log("Got ping");
+            self._cmd_ping(c)
     
     def _cmd_touch(self):
         import datetime
@@ -128,11 +173,73 @@ class Monitor:
         f = self.home.open_fifo(c.id, "w");
         f.write(pickle.dumps(ResponsePid(self.pid)));
         f.close();
+
+    def _cmd_ping(self, c):
+        self.sp.poll();
+
+        if self.sp.returncode is not None:
+            self.log("Child exited with returncode:", self.sp.returncode);
+            self.log("Initiating shutdown");
+            self.sp = None;
+            self.running = False;
+        
+        f = self.home.open_fifo(c.id, "w");
+        
+        try:
+            f.write(pickle.dumps(Pong()));
+        finally:
+            f.close();
     
-    def send(self, cmd):
-        f = self.home.open_fifo(self.id, "w");
-        f.write(pickle.dumps(cmd));
-        f.close();
+    def send(self, command, timeout=1):
+        import threading;
+        
+        sending = TimeoutSender(self, command);
+        sending.start();
+        sending.join(timeout);
+        
+        if sending.isAlive():
+            return False;
+        
+        if sending.error is not None:
+            raise sending.error;
+        
+        return True;
+    
+    def receive(self, uid, timeout=1):
+        reading = TimeoutReader(self, uid);
+        reading.start();
+        reading.join(timeout);
+        
+        if reading.isAlive():
+            return None;
+        
+        if reading.error is not None:
+            raise reading.error;
+        
+        return reading.result;
+
+    def communicate(self, command, timeout=1):
+        # create a temporary response channel
+        if not isinstance(command, MonitorCommand):
+            return None;
+        
+        uid = str(uuid.uuid1());
+        path = self.home.run(uid)
+
+        command.id = uid;
+        
+        try:
+            os.mkfifo(path);
+        except OSError, e:
+            return None;
+        
+        try:
+            if self.send(command, timeout):
+                return self.receive(uid, timeout);
+        finally:
+            os.unlink(path);
+        
+        return None;
     
     def spawn(self):
         """

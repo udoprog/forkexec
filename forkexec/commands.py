@@ -18,7 +18,16 @@
 #
 
 class MonitorCommand:
-    pass;
+    def __init__(self, id=None):
+        self.id = id;
+
+    def setid(self, id):
+        self.id = id;
+
+    def getid(self):
+        return self.id;
+    
+    id = property(getid, setid);
 
 class Touch(MonitorCommand):
     FILENAME="touch";
@@ -27,9 +36,14 @@ class Shutdown(MonitorCommand):
     pass;
 
 class PollPid(MonitorCommand):
-    def __init__(self, id):
-        self.id = id;
+    pass;
 
 class ResponsePid:
     def __init__(self, pid):
         self.pid = pid;
+
+class Ping(MonitorCommand):
+    pass;
+
+class Pong:
+    pass;
