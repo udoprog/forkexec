@@ -128,6 +128,10 @@ class Monitor:
             self.log("Creating alias:", self.alias);
             self.home.validate_alias(self.id, self.alias);
     
+    def stop(self):
+        self.sp = None;
+        self.running = False;
+    
     def shutdown(self):
         if self.sp:
           self.sp.kill();
@@ -159,11 +163,15 @@ class Monitor:
         
         if isinstance(c, Shutdown):
             self.log("Got command to shut down");
-            self.running = False;
+            self.stop();
         
         if isinstance(c, Ping):
             self.log("Got ping");
             self._cmd_ping(c)
+        
+        if isinstance(c, Restart):
+            self.log("Got restart");
+            self._cmd_restart(c)
     
     def _cmd_alias(self, command):
         # remove old alias.
@@ -186,15 +194,27 @@ class Monitor:
         f = self.home.open_fifo(c.id, "w");
         f.write(pickle.dumps(ResponsePid(self.pid)));
         f.close();
-
+    
+    def _cmd_restart(self, c):
+        self.log("Killing process");
+        self.sp.kill();
+        self.sp.wait();
+        
+        self.log("Spawning new process");
+        
+        if self.spawn():
+            self.log("Process spawned");
+        else:
+            self.log("Failed to spawn process");
+            self.stop();
+    
     def _cmd_ping(self, c):
         self.sp.poll();
-
+        
         if self.sp.returncode is not None:
             self.log("Child exited with returncode:", self.sp.returncode);
             self.log("Initiating shutdown");
-            self.sp = None;
-            self.running = False;
+            self.stop();
         
         f = self.home.open_fifo(c.id, "w");
         
@@ -266,7 +286,16 @@ class Monitor:
         sp = subprocess.Popen(self.home.inits(self.init))
         self.pid = sp.pid;
         self.sp = sp;
-        return True
+        
+        # poll for new returncode.
+        self.sp.poll();
+        
+        # this means that the process is already dead.
+        if self.sp.returncode != None:
+            self.stop();
+            return False;
+        
+        return True;
     
     def setproctitle(self):
         """

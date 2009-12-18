@@ -35,6 +35,9 @@ class Touch(MonitorCommand):
 class Shutdown(MonitorCommand):
     pass;
 
+class Restart(MonitorCommand):
+    pass;
+
 class PollPid(MonitorCommand):
     pass;
 

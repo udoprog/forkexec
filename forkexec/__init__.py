@@ -44,11 +44,11 @@ INIT="init"
 CMD_LIST=["list", "ls"]
 CMD_START=["spawn", "start", "run", "x"]
 CMD_STOP=["shutdown", "stop", "s"]
+CMD_RESTART=["restart"]
 CMD_CHECK=["check", "c"]
 CMD_CLEAN=["clean"]
 CMD_ALIAS=["alias"]
 CMD_PID=["pid", "p"]
-CMD_DEFAULT=CMD_LIST
 
 MAXFD=1024
 
@@ -67,18 +67,21 @@ class HomeDir:
     def _validate_home(self):
         try:
             if not os.path.isdir(self.run()):
+                print "Creating run directory:", self.run();
                 os.mkdir(self.run());
         except OSError, e:
             raise ForkExecException("%s: %s"%(self.run(), str(e)));
         
         try:
             if not os.path.isdir(self.inits()):
+                print "Creating init directory:", self.inits();
                 os.mkdir(self.inits());
         except OSError, e:
             raise ForkExecException("%s: %s"%(self.inits(), str(e)));
         
         try:
             if not os.path.isdir(self.logs()):
+                print "Creating logs directory:", self.logs();
                 os.mkdir(self.logs());
         except OSError, e:
             raise ForkExecException("%s: %s"%(self.logs(), str(e)));
@@ -226,7 +229,7 @@ def main():
     if len(args) > 0:
         command = args.pop().lower();
     else:
-        command = CMD_DEFAULT[0];
+        command = None;
     
     try:
         h = HomeDir(home);
@@ -238,6 +241,8 @@ def main():
         cmd_start(h, args);
     elif command in CMD_STOP:
         cmd_stop(h, args);
+    elif command in CMD_RESTART:
+        cmd_restart(h, args);
     elif command in CMD_CHECK:
         cmd_check(h, args);
     elif command in CMD_PID:
@@ -249,7 +254,28 @@ def main():
     elif command in CMD_ALIAS:
         cmd_alias(h, args);
     else:
-        print "No command"
+        print ""
+        print "Author: John-John Tedro <johnjohn.tedro@gmail.com>"
+        print "License: GPLv3"
+        print ""
+        print "Usage: fex <command>"
+        print ""
+        print "Valid <command>s are:"
+        print "    start <process> <id> [alias]"
+        print "    stop <id>"
+        print "    restart <id>"
+        print "    alias <id> <alias>"
+        print "    ls"
+        print "    pid <id>"
+        print ""
+        print "<id> can always be substituted for <alias>, if the process has any"
+        print "<process> must be an executable under $FE_HOME/init/<process>"
+        print ""
+        print "Many of the commands have shorter and/or alternative versions:"
+        print "    start - x"
+        print "    stop  - shutdown, s"
+        print "    restart - <none>"
+        print ""
     
     sys.exit(0);
 
@@ -298,6 +324,25 @@ def cmd_stop(h, args):
     
     if i == 0:
         print "No processes stopped"
+
+def cmd_restart(h, args):
+    i=0;
+    while len(args) > 0:
+        i += 1;
+        id = args.pop();
+
+        if not h.exists(id):
+            print "Does not exist (ignoring):", id
+            continue;
+        
+        print "Restarting:", id
+        m = Monitor(h, id);
+        if not m.send(commands.Restart()):
+            print "Unable to restart, cleaning id:", id
+            h.clean(id);
+    
+    if i == 0:
+        print "No processes restarted"
 
 def cmd_pid(h, args):
     if len(args) > 0:
