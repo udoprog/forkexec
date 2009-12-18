@@ -216,18 +216,36 @@ class MonitorDaemon(Daemon):
     #    sys.exit(0);
 
 def get_time(seconds):
+    hours = None;
+    minutes = None;
+    
     if seconds < 120.0:
-        return "%.2f seconds"%(seconds);
+        pass;
     elif seconds < 3600.0:
         minutes = int(seconds / 60.0);
         seconds = seconds % 60;
-        return "%d minutes, %.2f seconds"%( minutes, seconds );
     else:
         hours   = int(seconds / 3600.0);
-        minutes = int(seconds / 60.0);
+        minutes = int(seconds / 60.0) % 60;
         seconds = seconds % 60;
-        
-        return "%d hours, %d minutes, %.2f seconds"%( hours, minutes, seconds );
+    
+    parts = list();
+    
+    if hours:
+        if hours <= 1:
+            parts.append( "%d hour"%( hours ) );
+        else:
+            parts.append( "%d hours"%( hours ) );
+    
+    if minutes:
+        if minutes <= 1:
+            parts.append( "%d minute"%( minutes ) );
+        else:
+            parts.append( "%d minutes"%( minutes ) );
+    
+    parts.append( "%.2f seconds"%( seconds ) );
+    
+    return ", ".join( parts );
 
 def main():
     home = os.environ.get("FE_HOME", None);

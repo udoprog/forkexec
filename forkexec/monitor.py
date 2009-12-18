@@ -131,15 +131,31 @@ class Monitor:
                 
                 if not c:
                     self.log( "Got bad command:", repr(s) );
-                
-                self._handle_reception(c);
+                else:
+                    self._handle_reception(c);
             except Exception, e:
                 import traceback
                 self.log( "Exc:", traceback.format_exc() );
             finally:
                 f.close();
+            
+            if not self._check_process():
+                self.log("Child exited with returncode:", self.sp.returncode);
+                self.log("Initiating shutdown");
+                self.stop();
         
         self.log("Monitor Shutting Down");
+
+    def _check_process(self):
+        """
+        Check that process is running.
+        """
+        self.sp.poll();
+        
+        if self.sp.returncode is not None:
+            return False;
+        
+        return True;
     
     def _prepare_channels(self):
         self.home.validate_fifo(self.id);
@@ -173,23 +189,27 @@ class Monitor:
             self.log("Got alias command");
             self._cmd_alias(c)
         
-        if isinstance(c, Touch):
+        elif isinstance(c, Touch):
             self.log("Got touch command");
             self._cmd_touch()
         
-        if isinstance(c, Info):
-            self.log("Got pid command");
+        elif isinstance(c, Info):
+            self.log("Got info command");
             self._cmd_info(c)
         
-        if isinstance(c, Shutdown):
+        elif isinstance(c, Shutdown):
             self.log("Got command to shut down");
             self.stop();
         
-        if isinstance(c, Ping):
+        elif isinstance(c, Ping):
             self.log("Got ping");
             self._cmd_ping(c)
         
-        if isinstance(c, Restart):
+        elif isinstance(c, Signal):
+            self.log("Got signal");
+            self._cmd_signal(c)
+        
+        elif isinstance(c, Restart):
             self.log("Got restart");
             self._cmd_restart(c)
     
@@ -225,19 +245,17 @@ class Monitor:
         self.log("Spawning new process");
         
         if self.spawn():
+            self.running = time.time();
             self.log("Process spawned");
         else:
             self.log("Failed to spawn process");
             self.stop();
     
+    def _cmd_signal(self, c):
+        self.log("Sending signal to process", c.signal);
+        self.sp.send_signal(c.signal);
+    
     def _cmd_ping(self, c):
-        self.sp.poll();
-        
-        if self.sp.returncode is not None:
-            self.log("Child exited with returncode:", self.sp.returncode);
-            self.log("Initiating shutdown");
-            self.stop();
-        
         f = self.home.open_fifo(c.id, "w");
         
         try:

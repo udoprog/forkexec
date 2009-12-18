@@ -17,6 +17,8 @@
 # author: John-John Tedro <johnjohn.tedro@gmail.com>
 #
 
+import signal;
+
 import json;
 
 class MonitorCommand(object):
@@ -94,6 +96,18 @@ class InfoResponse(MonitorCommand):
     def __init__(self, pid = None, started = None):
         self.pid = pid;
         self.started = started;
+
+class Signal(MonitorCommand):
+    attr_list = ["signal"];
+    
+    SIGNALS={
+        'TERM': signal.SIGTERM,
+        'KILL': signal.SIGKILL,
+        'HUP':  signal.SIGHUP
+    };
+    
+    def __init__(self, signal=None):
+        self.signal = signal;
 
 class Ping(MonitorCommand):
     pass;
