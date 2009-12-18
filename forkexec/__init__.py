@@ -217,75 +217,101 @@ def main():
         sys.exit(1);
     
     if command in CMD_START:
-        if len(args) > 0:
-            id = args.pop();
-        else:
-            sys.exit(1);
-        
-        if len(args) > 0:
-            alias = args.pop();
-        else:
-            alias = None;
-
-        if not os.path.isfile(h.run(id)):
-            print "%s: %s"%(h.run(id), "does not exist, create it if you want to run the specific process")
-            sys.exit(1);
-        
-        print "Starting:", id
-        MonitorDaemon(h, [id, alias], daemonize=True).start();
+        cmd_start(h, args);
     elif command in CMD_STOP:
-        while len(args) > 0:
-            id = args.pop();
-            
-            print "Shutting down:", id
-            m = Monitor(h, id);
-            m.send(commands.Shutdown());
+        cmd_stop(h, args);
     elif command in CMD_CHECK:
-        if len(args) > 0:
-            id = args.pop();
-        else:
-            sys.exit(1);
-        
-        m = Monitor(h, id);
-        m.send(commands.Touch());
+        cmd_check(h, args);
     elif command in CMD_PID:
-        if len(args) > 0:
-            id = args.pop();
-        else:
-            sys.exit(1);
-        
-        uid = str(uuid.uuid1());
-
-        path = h.run(uid)
-        os.mkfifo(path);
-
-        r = None;
-
-        try:
-            m = Monitor(h, id);
-            m.send(commands.PollPid(uid));
-            
-            f = h.open_fifo(path, "r");
-            r = pickle.loads(f.read())
-            f.close();
-        finally:
-            os.unlink(path);
-        if r:
-            print r.pid;
-        else:
-            print "Unable to get pid";
+        cmd_pid(h, args);
     elif command in CMD_LIST:
-        if not os.path.isdir(h.run()):
-            return;
-        
-        for f in os.listdir(h.run()):
-            path = h.run(f);
-            
-            if os.path.islink(path):
-                print "%s -> %s"%(f, os.path.basename(os.readlink(path)))
-            else:
-                print f
+        cmd_list(h, args);
     else:
         print "No command"
     
     sys.exit(0);
+
+def cmd_start(h, args):
+    if len(args) > 0:
+        id = args.pop();
+    else:
+        sys.exit(1);
+    
+    if len(args) > 0:
+        alias = args.pop();
+    else:
+        alias = None;
+
+    if not os.path.isfile(h.run(id)):
+        print "%s: %s"%(h.run(id), "does not exist, create it if you want to run the specific process")
+        sys.exit(1);
+    
+    print "Starting:", id
+    MonitorDaemon(h, [id, alias], daemonize=True).start();
+
+def cmd_check(h, args):
+    if len(args) > 0:
+        id = args.pop();
+    else:
+        sys.exit(1);
+    
+    m = Monitor(h, id);
+    m.send(commands.Touch());
+
+def cmd_stop(h, args):
+    i=0;
+    while len(args) > 0:
+        i += 1;
+        id = args.pop();
+        
+        print "Shutting down:", id
+        m = Monitor(h, id);
+        m.send(commands.Shutdown());
+    
+    if i == 0:
+        print "No processes stopped"
+
+def cmd_pid(h, args):
+    if len(args) > 0:
+        id = args.pop();
+    else:
+        sys.exit(1);
+    
+    uid = str(uuid.uuid1());
+
+    path = h.run(uid)
+    os.mkfifo(path);
+
+    r = None;
+
+    try:
+        m = Monitor(h, id);
+        m.send(commands.PollPid(uid));
+        
+        f = h.open_fifo(path, "r");
+        r = pickle.loads(f.read())
+        f.close();
+    finally:
+        os.unlink(path);
+    if r:
+        print r.pid;
+    else:
+        print "Unable to get pid";
+
+def cmd_list(h, args):
+    if not os.path.isdir(h.run()):
+        return;
+    
+    i = 0;
+    for f in os.listdir(h.run()):
+        i += 1;
+        
+        path = h.run(f);
+        
+        if os.path.islink(path):
+            print "%s -> %s"%(f, os.path.basename(os.readlink(path)))
+        else:
+            print f
+
+    if i == 0:
+        print "No running processes";
