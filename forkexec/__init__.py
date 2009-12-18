@@ -46,6 +46,7 @@ CMD_START=["spawn", "start", "run", "x"]
 CMD_STOP=["shutdown", "stop", "s"]
 CMD_CHECK=["check", "c"]
 CMD_CLEAN=["clean"]
+CMD_ALIAS=["alias"]
 CMD_PID=["pid", "p"]
 CMD_DEFAULT=CMD_LIST
 
@@ -245,6 +246,8 @@ def main():
         cmd_list(h, args);
     elif command in CMD_CLEAN:
         cmd_clean(h, args);
+    elif command in CMD_ALIAS:
+        cmd_alias(h, args);
     else:
         print "No command"
     
@@ -345,3 +348,16 @@ def cmd_clean(h, args):
     
     if i == 0:
         print "Nothing to clean"
+
+def cmd_alias(h, args):
+    if len(args) < 2:
+        return;
+
+    id = args.pop();
+    alias = args.pop();
+
+    if not h.exists(id):
+        print "No such id:", id
+        return;
+    
+    h.validate_alias(id, alias);
