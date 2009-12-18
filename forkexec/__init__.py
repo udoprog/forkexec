@@ -17,7 +17,8 @@
 # author: John-John Tedro <johnjohn.tedro@gmail.com>
 #
 
-import os, sys
+import sys
+import os
 import pickle
 import time
 import uuid
@@ -225,9 +226,13 @@ def main():
             alias = args.pop();
         else:
             alias = None;
+
+        if not os.path.isfile(h.run(id)):
+            print "%s: %s"%(h.run(id), "does not exist, create it if you want to run the specific process")
+            sys.exit(1);
         
         print "Starting:", id
-        MonitorDaemon(h, [id, alias], daemonize=False).start();
+        MonitorDaemon(h, [id, alias], daemonize=True).start();
     elif command in CMD_STOP:
         while len(args) > 0:
             id = args.pop();

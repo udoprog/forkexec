@@ -88,8 +88,9 @@ class Monitor:
             self.home.validate_alias(self.id, self.alias);
     
     def shutdown(self):
-        self.sp.terminate();
-        self.sp.wait();
+        if self.sp:
+          self.sp.terminate();
+          self.sp.wait();
         
         fifo = self.home.run(self.id);
         
