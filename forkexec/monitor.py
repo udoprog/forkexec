@@ -20,7 +20,6 @@
 import sys
 import os
 import subprocess
-import pickle
 import uuid
 import datetime
 
@@ -41,7 +40,7 @@ class TimeoutSender(threading.Thread):
             f = self.monitor.home.open_fifo(self.monitor.id, "w");
             
             try:
-                f.write(pickle.dumps(self.command));
+                f.write(self.command.to_json());
             finally:
                 f.close();
         except Exception, e:
@@ -59,8 +58,10 @@ class TimeoutReader(threading.Thread):
         try:
             f = self.monitor.home.open_fifo(self.id, "r");
             
+            r = dict();
+            
             try:
-                self.result = pickle.loads(f.read());
+                self.result = MonitorCommand.from_json(f.read());
             finally:
                 f.close();
         except Exception, e:
@@ -112,7 +113,12 @@ class Monitor:
             f = self.home.open_fifo(self.id, "r");
             
             try:
-                c = pickle.loads( f.read() );
+                s = f.read();
+                c = MonitorCommand.from_json( s );
+                
+                if not c:
+                    self.log( "Got bad command:", repr(s) );
+                
                 self._handle_reception(c);
             except Exception, e:
                 self.log( "Exc:", str(e) );
@@ -139,7 +145,7 @@ class Monitor:
         
         fifo = self.home.run(self.id);
         
-        self.home.delete_fifo(self.id);
+        self.home.clean(self.id);
         
         if self.alias:
             self.home.delete_alias(self.alias);
@@ -192,7 +198,7 @@ class Monitor:
     
     def _cmd_pollpid(self, c):
         f = self.home.open_fifo(c.id, "w");
-        f.write(pickle.dumps(ResponsePid(self.pid)));
+        f.write(ResponsePid(self.pid).to_json());
         f.close();
     
     def _cmd_restart(self, c):
@@ -219,7 +225,7 @@ class Monitor:
         f = self.home.open_fifo(c.id, "w");
         
         try:
-            f.write(pickle.dumps(Pong()));
+            f.write(Pong().to_json());
         finally:
             f.close();
     
@@ -234,7 +240,8 @@ class Monitor:
             return False;
         
         if sending.error is not None:
-            raise sending.error;
+            print str(sending.error);
+            return False;
         
         return True;
     
@@ -247,7 +254,8 @@ class Monitor:
             return None;
         
         if reading.error is not None:
-            raise reading.error;
+            print str(reading.error);
+            return False;
         
         return reading.result;
 

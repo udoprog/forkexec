@@ -17,17 +17,58 @@
 # author: John-John Tedro <johnjohn.tedro@gmail.com>
 #
 
-class MonitorCommand:
+import json;
+
+class MonitorCommand(object):
+    attr_list = list();
+    id = 0;
+    
     def __init__(self, id=None):
         self.id = id;
-
-    def setid(self, id):
-        self.id = id;
-
-    def getid(self):
-        return self.id;
     
-    id = property(getid, setid);
+    def get_attributes(self):
+        h = dict();
+        
+        for a in self.attr_list:
+            h[a] = getattr(self, a);
+        
+        h["__id__"] = self.id;
+        h["__name__"] = self.__class__.__name__
+        return h;
+    
+    def set_attributes(self, h):
+        self.id = h.get("__id__", None);
+        h.pop("__name__", None)
+        
+        for a in h.keys():
+            setattr(self, a, h[a]);
+
+    def to_json(self):
+        return json.dumps(self.get_attributes());
+    
+    @classmethod
+    def from_json(klass, json_s):
+        h = json.loads(json_s);
+        
+        name = h.pop("__name__", None);
+        
+        if not name:
+            return None;
+        
+        cls = None;
+        
+        for k in MonitorCommand.__subclasses__():
+            if k.__name__ == name:
+                cls = k;
+                break;
+        
+        if not cls:
+            return None;
+
+        cls_i = cls();
+        cls_i.set_attributes(h);
+        return cls_i;
+
 
 class Touch(MonitorCommand):
     FILENAME="touch";
@@ -42,15 +83,23 @@ class PollPid(MonitorCommand):
     pass;
 
 class Alias(MonitorCommand):
-    def __init__(self, alias):
+    attr_list = ["alias"];
+    
+    def __init__(self, alias = None):
         self.alias = alias;
 
-class ResponsePid:
-    def __init__(self, pid):
+class ResponsePid(MonitorCommand):
+    attr_list = ["pid"];
+    
+    def __init__(self, pid = None):
         self.pid = pid;
 
 class Ping(MonitorCommand):
     pass;
 
-class Pong:
+class Pong(MonitorCommand):
     pass;
+
+if __name__ == "__main__":
+    assert MonitorCommand.from_json(ResponsePid(1234).to_json()).pid == 1234;
+    assert MonitorCommand.from_json(Alias("foo").to_json()).alias == "foo";

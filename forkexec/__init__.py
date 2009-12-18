@@ -19,7 +19,6 @@
 
 import sys
 import os
-import pickle
 import time
 import uuid
 import subprocess
@@ -158,17 +157,14 @@ class HomeDir:
             if os.path.islink(path):
                 os.unlink(path);
             
-            if os.path.exists(path_from):
+            if self.exists(path_from):
                 os.symlink(path_from, path);
 
-    def delete_fifo(self, fifoname):
+    def _delete_run(self, id):
         """
         Delete a specific fifo in the home directory.
         """
-        path = self.run(fifoname);
-        
-        if os.path.exists(path):
-            os.unlink(path);
+        os.unlink(self.run(id));
 
     def delete_alias(self, alias):
         """
@@ -177,17 +173,20 @@ class HomeDir:
         if not alias:
             return;
         
-        path = self.run(alias);
-        
-        if os.path.islink(path):
-            os.unlink(path);
+        if self.exists(id):
+            self._delete_run(alias);
+            return True;
     
     def exists(self, id):
-        return os.path.exists(self.run(id));
+        path = self.run(id);
+        return os.path.exists(path) or os.path.islink(path);
     
     def clean(self, id):
+        print id, self.exists(id), self.run(id);
         if self.exists(id):
-            self.delete_fifo(id);
+            self._delete_run(id);
+            return True;
+        return False;
 
 class MonitorDaemon(Daemon):
     def run(self):
@@ -304,7 +303,10 @@ def cmd_check(h, args):
         sys.exit(1);
     
     m = Monitor(h, id);
-    m.send(commands.Touch());
+    
+    if not m.send(commands.Touch()):
+        print "Unable to touch, cleaning id:", id
+        h.clean(id);
 
 def cmd_stop(h, args):
     i=0;
