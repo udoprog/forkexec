@@ -232,7 +232,7 @@ class Monitor:
     def _cmd_info(self, c):
         f = self.home.open_fifo(c.id, "w");
         
-        response = InfoResponse(self.pid, time.time() - self.started)
+        response = InfoResponse(self.pid, time.time() - self.started, self.init)
         
         f.write(response.to_json());
         f.close();

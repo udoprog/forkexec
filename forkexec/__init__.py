@@ -388,6 +388,7 @@ def cmd_info(h, args):
     r = m.communicate(commands.Info());
     
     if r:
+        print "init:    %s"%( h.inits( r.init ) )
         print "pid:     %s"%( r.pid );
         print "running: %s"%( get_time( r.started ) )
     else:

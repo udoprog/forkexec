@@ -91,11 +91,12 @@ class Info(MonitorCommand):
     pass;
 
 class InfoResponse(MonitorCommand):
-    attr_list = ["pid", "started"];
+    attr_list = ["pid", "started", "init"];
     
-    def __init__(self, pid = None, started = None):
+    def __init__(self, pid = None, started = None, init = None):
         self.pid = pid;
         self.started = started;
+        self.init = init;
 
 class Signal(MonitorCommand):
     attr_list = ["signal"];
