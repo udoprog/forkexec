@@ -67,6 +67,14 @@ class TimeoutReader(threading.Thread):
         except Exception, e:
             self.error = e;
 
+class LogWrapper:
+    def __init__(self, prefix, monitor):
+        self.prefix = prefix;
+        self.monitor = monitor;
+    
+    def write(self, str):
+        self.monitor.log("%s - %s"%(self.prefix, str));
+
 class Monitor:
     """
     Internal monitor class for handling the process state.
@@ -84,8 +92,11 @@ class Monitor:
         
         self.setproctitle();
         
+        #self.log_fd = sys.stdout;
         self.log_fd = self.open_log();
-
+        #sys.stdout = LogWrapper("STDOUT", self);
+        #sys.stderr = LogWrapper("STDERR", self);
+    
     def open_log(self):
         bestname = self.id;
         
@@ -121,7 +132,8 @@ class Monitor:
                 
                 self._handle_reception(c);
             except Exception, e:
-                self.log( "Exc:", str(e) );
+                import traceback
+                self.log( "Exc:", traceback.format_exc() );
             finally:
                 f.close();
         
@@ -183,7 +195,7 @@ class Monitor:
         # remove old alias.
         if self.alias:
             self.home.delete_alias(self.alias);
-        
+
         self.alias = command.alias;
         
         self.home.validate_alias(self.id, self.alias);

@@ -173,7 +173,7 @@ class HomeDir:
         if not alias:
             return;
         
-        if self.exists(id):
+        if self.exists(alias):
             self._delete_run(alias);
             return True;
     
