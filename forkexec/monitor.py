@@ -130,7 +130,7 @@ class Monitor:
     
     def shutdown(self):
         if self.sp:
-          self.sp.terminate();
+          self.sp.kill();
           self.sp.wait();
         
         fifo = self.home.run(self.id);
