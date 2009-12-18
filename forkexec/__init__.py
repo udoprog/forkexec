@@ -47,7 +47,7 @@ CMD_RESTART=["restart"]
 CMD_CHECK=["check", "c"]
 CMD_CLEAN=["clean"]
 CMD_ALIAS=["alias"]
-CMD_PID=["pid", "p"]
+CMD_INFO=["info", "i"]
 
 MAXFD=1024
 
@@ -215,6 +215,20 @@ class MonitorDaemon(Daemon):
     #    self.m.shutdown();
     #    sys.exit(0);
 
+def get_time(seconds):
+    if seconds < 120.0:
+        return "%.2f seconds"%(seconds);
+    elif seconds < 3600.0:
+        minutes = int(seconds / 60.0);
+        seconds = seconds % 60;
+        return "%d minutes, %.2f seconds"%( minutes, seconds );
+    else:
+        hours   = int(seconds / 3600.0);
+        minutes = int(seconds / 60.0);
+        seconds = seconds % 60;
+        
+        return "%d hours, %d minutes, %.2f seconds"%( hours, minutes, seconds );
+
 def main():
     home = os.environ.get("FE_HOME", None);
     
@@ -244,8 +258,8 @@ def main():
         cmd_restart(h, args);
     elif command in CMD_CHECK:
         cmd_check(h, args);
-    elif command in CMD_PID:
-        cmd_pid(h, args);
+    elif command in CMD_INFO:
+        cmd_info(h, args);
     elif command in CMD_LIST:
         cmd_list(h, args);
     elif command in CMD_CLEAN:
@@ -346,17 +360,18 @@ def cmd_restart(h, args):
     if i == 0:
         print "No processes restarted"
 
-def cmd_pid(h, args):
+def cmd_info(h, args):
     if len(args) > 0:
         id = args.pop();
     else:
         sys.exit(1);
     
     m = Monitor(h, id);
-    r = m.communicate(commands.PollPid());
+    r = m.communicate(commands.Info());
     
     if r:
-        print r.pid;
+        print "pid:     %s"%( r.pid );
+        print "running: %s"%( get_time( r.started ) )
     else:
         print "Unable to get pid";
 

@@ -22,6 +22,7 @@ import os
 import subprocess
 import uuid
 import datetime
+import time
 
 import setproctitle
 
@@ -89,6 +90,7 @@ class Monitor:
         self.init = init;
         
         self.sp = None;
+        self.started = time.time();
         
         self.setproctitle();
         
@@ -175,9 +177,9 @@ class Monitor:
             self.log("Got touch command");
             self._cmd_touch()
         
-        if isinstance(c, PollPid):
+        if isinstance(c, Info):
             self.log("Got pid command");
-            self._cmd_pollpid(c)
+            self._cmd_info(c)
         
         if isinstance(c, Shutdown):
             self.log("Got command to shut down");
@@ -201,16 +203,18 @@ class Monitor:
         self.home.validate_alias(self.id, self.alias);
     
     def _cmd_touch(self):
-        import datetime
         tp = self.home.path(Touch.FILENAME)
         
         ft = open(tp, "a");
         ft.write("touched at %s by %s\n"%(datetime.datetime.now(), self.id));
         ft.close();
     
-    def _cmd_pollpid(self, c):
+    def _cmd_info(self, c):
         f = self.home.open_fifo(c.id, "w");
-        f.write(ResponsePid(self.pid).to_json());
+        
+        response = InfoResponse(self.pid, time.time() - self.started)
+        
+        f.write(response.to_json());
         f.close();
     
     def _cmd_restart(self, c):

@@ -79,20 +79,21 @@ class Shutdown(MonitorCommand):
 class Restart(MonitorCommand):
     pass;
 
-class PollPid(MonitorCommand):
-    pass;
-
 class Alias(MonitorCommand):
     attr_list = ["alias"];
     
     def __init__(self, alias = None):
         self.alias = alias;
 
-class ResponsePid(MonitorCommand):
-    attr_list = ["pid"];
+class Info(MonitorCommand):
+    pass;
+
+class InfoResponse(MonitorCommand):
+    attr_list = ["pid", "started"];
     
-    def __init__(self, pid = None):
+    def __init__(self, pid = None, started = None):
         self.pid = pid;
+        self.started = started;
 
 class Ping(MonitorCommand):
     pass;
