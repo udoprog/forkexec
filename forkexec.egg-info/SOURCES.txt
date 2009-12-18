@@ -1,0 +1,13 @@
+README
+setup.cfg
+setup.py
+forkexec/__init__.py
+forkexec/commands.py
+forkexec/daemonize.py
+forkexec/monitor.py
+forkexec.egg-info/PKG-INFO
+forkexec.egg-info/SOURCES.txt
+forkexec.egg-info/dependency_links.txt
+forkexec.egg-info/entry_points.txt
+forkexec.egg-info/top_level.txt
+forkexec.egg-info/zip-safe

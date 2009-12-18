@@ -1,0 +1,84 @@
+RATIONALE:
+
+    I got sick and tired of having to restart development processes which liked to hang alot by doing this:
+
+        ps faux | grep "Whatever string that matches"
+        kill <pid>
+
+    This is dirty, does not retain a clean process state, and generally takes too much attention.
+
+    Hacks that retain the pid in a seperate file are too various, and cumbersome to setup (at least when doing it a couple of times per day!).
+
+    I know! Why not retain the pid in container process which is the bad-ass, control freak of a parent?
+
+README:
+
+To install forkexec, run:
+
+    #> python setup.py install
+
+As a privileged user.
+
+This will install the command 'fex'
+
+The first time you run fex you will be prompted for the FE_HOME environment variable.
+
+To change the variable temprorary, run:
+
+    #> export FE_HOME=/usr/local/forkexec
+
+Or any other writable directory accessable to your user.
+
+now try:
+
+    #> fex
+
+And check the directory, the structure will be something like:
+
+    ./run
+    ./init
+    ./logs
+
+If you add an executable to ./init, that might contain:
+
+
+    #!/bin/bash
+    #contents of /usr/local/forkexec/init/netcat
+    exec nc -l -p 32323
+
+You can run the command:
+
+    fex start netcat
+
+In which the specific command will have been launched.
+
+Under your ./run directory, you should have a couple of files, among them:
+
+    ./run/<uuid>
+    ./run/netcat -> <uuid>
+
+Where ./run/netcat is a symlink to your id file.
+
+To stop netcat, run:
+
+    fex stop netcat
+
+In which netcat will be terminated (SIGTERM) and the files under run will be removed.
+
+While running netcat, you might have noticed the following entry in your favorite process explorer (e.g. htop):
+
+    <information> forkexec: Monitor Process (<uuid>)
+    <information>  `- nc -l -p 32323
+
+netcat is directly parented by forkexec's Monitor Process which can be remotely controlled using the 'fex' command.
+
+Current features are:
+    - start processes
+    - stop processes
+    - will automatically daemonize any process.
+
+Future/Planned features are:
+    - configurable stopping (e.g. choosing which signal combination to use).
+    - get the childs pid, as soon as I figure out a nice way for the Monitor Process to respond.
+
+Do not even attempt to run real daemon's with fex, if possible you should not allow the child process to get into the background.

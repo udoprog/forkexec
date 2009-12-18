@@ -1,0 +1,11 @@
+Metadata-Version: 1.0
+Name: forkexec
+Version: 0.1dev
+Summary: Fork and execute non-detaching processes in a controlled manner
+Home-page: UNKNOWN
+Author: John-John Tedro
+Author-email: johnjohn.tedro@gmail.com
+License: GPLv3
+Description: UNKNOWN
+Keywords: development
+Platform: UNKNOWN
