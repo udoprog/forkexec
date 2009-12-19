@@ -4,6 +4,7 @@ setup.py
 forkexec/__init__.py
 forkexec/commands.py
 forkexec/daemonize.py
+forkexec/main.py
 forkexec/monitor.py
 forkexec.egg-info/PKG-INFO
 forkexec.egg-info/SOURCES.txt

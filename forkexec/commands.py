@@ -76,7 +76,12 @@ class Touch(MonitorCommand):
     FILENAME="touch";
 
 class Shutdown(MonitorCommand):
-    pass;
+    KILL="kill";
+    TERM="term";
+    INIT="init";
+    
+    def __init__(self, type=None):
+        self.type = type;
 
 class Restart(MonitorCommand):
     pass;

@@ -40,6 +40,9 @@ class TimeoutSender(threading.Thread):
         try:
             f = self.monitor.home.open_fifo(self.monitor.id, "w");
             
+            if not f:
+                return;
+            
             try:
                 f.write(self.command.to_json());
             finally:
@@ -58,6 +61,9 @@ class TimeoutReader(threading.Thread):
     def run(self):
         try:
             f = self.monitor.home.open_fifo(self.id, "r");
+
+            if not f:
+                return;
             
             r = dict();
             
@@ -199,7 +205,7 @@ class Monitor:
         
         elif isinstance(c, Shutdown):
             self.log("Got command to shut down");
-            self.stop();
+            self._cmd_stop(c);
         
         elif isinstance(c, Ping):
             self.log("Got ping");
@@ -212,6 +218,27 @@ class Monitor:
         elif isinstance(c, Restart):
             self.log("Got restart");
             self._cmd_restart(c)
+    
+    def _cmd_stop(self, command):
+        if command.type == command.KILL:
+            self.sp.kill();
+            self.stop();
+        elif command.type == command.TERM:
+            self.sp.terminate();
+            self.stop();
+        elif command.type == command.INIT:
+            self._stop_init();
+
+    def _stop_init(self):
+        # start the process that shuts down the child process.
+        stop_p = subprocess.Popen([self.home.inits(self.init), "stop", self.pid])
+        # wait for process to finish (guarantee return code)
+        stop_p.wait();
+        
+        if stop_p.returncode == 0 and self.sp.returncode != None:
+            self.stop();
+        else:
+            self.log( "%s: did not return zero, or child process is not dead - not shutting down"%( self.home.inits(self.init) ) );
     
     def _cmd_alias(self, command):
         # remove old alias.
@@ -294,6 +321,11 @@ class Monitor:
         return reading.result;
 
     def communicate(self, command, timeout=1):
+        """
+        communicate creates a temporary response channel (fifo)
+        that the monitor can use to return any command.
+        """
+        
         # create a temporary response channel
         if not isinstance(command, MonitorCommand):
             return None;
@@ -325,9 +357,8 @@ class Monitor:
             self.log("Init does not exist:", self.init);
             return False;
         
-        sp = subprocess.Popen(self.home.inits(self.init))
-        self.pid = sp.pid;
-        self.sp = sp;
+        self.sp = subprocess.Popen([self.home.inits(self.init), "start"])
+        self.pid = self.sp.pid;
         
         # poll for new returncode.
         self.sp.poll();

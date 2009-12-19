@@ -27,27 +27,17 @@ import stat
 try:
     import setproctitle
 except ImportError, e:
-    print str(e);
-    print "Please install setproctitle using:"
-    print "    easy_install setproctitle"
-    print "or other applicable method"
+    print( str(e) )
+    print( "Please install setproctitle using:" )
+    print( "    easy_install setproctitle" )
+    print( "or other applicable method" )
     sys.exit(1);
 
-from forkexec.monitor import Monitor
-from forkexec.daemonize import Daemon
-import forkexec.commands as commands
+import forkexec.main as m
 
 RUN="run"
 LOGS="logs"
 INIT="init"
-CMD_LIST=["list", "ls"]
-CMD_START=["spawn", "start", "run", "x"]
-CMD_STOP=["shutdown", "stop", "s"]
-CMD_RESTART=["restart"]
-CMD_CHECK=["check", "c"]
-CMD_CLEAN=["clean"]
-CMD_ALIAS=["alias"]
-CMD_INFO=["info", "i"]
 
 MAXFD=1024
 
@@ -66,21 +56,21 @@ class HomeDir:
     def _validate_home(self):
         try:
             if not os.path.isdir(self.run()):
-                print "Creating run directory:", self.run();
+                print( "Creating run directory:", self.run() )
                 os.mkdir(self.run());
         except OSError, e:
             raise ForkExecException("%s: %s"%(self.run(), str(e)));
         
         try:
             if not os.path.isdir(self.inits()):
-                print "Creating init directory:", self.inits();
+                print( "Creating init directory:", self.inits() )
                 os.mkdir(self.inits());
         except OSError, e:
             raise ForkExecException("%s: %s"%(self.inits(), str(e)));
         
         try:
             if not os.path.isdir(self.logs()):
-                print "Creating logs directory:", self.logs();
+                print( "Creating logs directory:", self.logs() )
                 os.mkdir(self.logs());
         except OSError, e:
             raise ForkExecException("%s: %s"%(self.logs(), str(e)));
@@ -97,6 +87,23 @@ class HomeDir:
     def inits(self, *parts):
         return self.path(INIT, *parts);
     
+    def isinit(self, id):
+        path = self.inits( id );
+        
+        if not os.path.isfile( path ):
+            return False;
+        
+        return True;
+
+    def isrun(self, id):
+        return self.isrun_p( self.run(id) );
+    
+    def isrun_p(self, path):
+        if not os.path.exists( path ):
+            return False;
+        
+        return stat.S_ISFIFO( os.stat(path).st_mode );
+    
     def open_log(self, logname):
         path = self.logs(logname);
         
@@ -105,34 +112,20 @@ class HomeDir:
         except OSError, e:
             raise ForkExecException("%s: %s"%(path, str(e)));
     
-    def exec_init(self, initname):
-        path = self.inits(initname);
-        
-        try:
-            os.execv(path, [path]);
-        except OSError, e:
-            raise ForkExecException("%s: %s"%(path, str(e)));
-
     def open_fifo(self, fifoname, mode="r"):
         """
         Open the main fifo for this monitor.
         """
-
-        path = self.run(fifoname);
-
-        if not self._isfifo(path):
-            raise ForkExecException("%s: is not a fifo"%(path));
+        
+        path = self.run( fifoname );
+        
+        if not self.isrun_p( path ):
+            return None;
         
         try:
-            return open(path, mode);
+            return open( path, mode );
         except OSError, e:
-            raise ForkExecException("%s: %s"%(path, str(e)));
-
-    def _isfifo(self, path):
-        try:
-            return stat.S_ISFIFO(os.stat(path).st_mode);
-        except:
-            return False;
+            return None;
     
     def validate_fifo(self, fifoname):
         path = self.run(fifoname);
@@ -141,10 +134,10 @@ class HomeDir:
             if not os.path.exists(path):
                 os.mkfifo(path);
             
-            if not self._isfifo(path):
+            if not self.isrun_p(path):
                 os.unlink(path);
                 os.mkfifo(path);
-            
+        
         except OSError, e:
             raise ForkExecException("%s: %s"%(path, str(e)));
 
@@ -182,78 +175,40 @@ class HomeDir:
         return os.path.exists(path) or os.path.islink(path);
     
     def clean(self, id):
-        print id, self.exists(id), self.run(id);
         if self.exists(id):
             self._delete_run(id);
             return True;
+        
         return False;
 
-class MonitorDaemon(Daemon):
-    def run(self):
-        import signal
-
-        init = self.args[0];
-        alias = self.args[1];
+    def select_runs(self, id_hint=None):
+        """
+        Select a subset of run entries from directory, if any starts with id_hint.
+        If there is a perfect match, only return that one no matter what.
+        """
+        if not id_hint:
+            return os.listdir(self.run());
         
-        self.m = Monitor(self.home, self.id, init=init, alias=alias);
+        result = list();
         
-        #signal.signal(signal.SIGHUP, self.signal_handler)
-
-        if not self.m.spawn():
-            self.m.shutdown();
-            sys.exit(1);
+        for f in os.listdir(self.run()):
+            if f == id_hint:
+                return [f];
         
-        try:
-            self.m.run();
-        except Exception, e:
-            import traceback
-            self.m.log(traceback.format_exc());
+            if f.startswith(id_hint):
+                result.append(f);
         
-        self.m.shutdown();
-    
-    #def signal_handler(self, signal, frame):
-    #    self.m.shutdown();
-    #    sys.exit(0);
-
-def get_time(seconds):
-    hours = None;
-    minutes = None;
-    
-    if seconds < 120.0:
-        pass;
-    elif seconds < 3600.0:
-        minutes = int(seconds / 60.0);
-        seconds = seconds % 60;
-    else:
-        hours   = int(seconds / 3600.0);
-        minutes = int(seconds / 60.0) % 60;
-        seconds = seconds % 60;
-    
-    parts = list();
-    
-    if hours:
-        if hours <= 1:
-            parts.append( "%d hour"%( hours ) );
-        else:
-            parts.append( "%d hours"%( hours ) );
-    
-    if minutes:
-        if minutes <= 1:
-            parts.append( "%d minute"%( minutes ) );
-        else:
-            parts.append( "%d minutes"%( minutes ) );
-    
-    parts.append( "%.2f seconds"%( seconds ) );
-    
-    return ", ".join( parts );
+        return result;
 
 def main():
     home = os.environ.get("FE_HOME", None);
+    p = m.ConsolePrinter();
     
     if not home:
-        print "You must set environment variable 'FE_HOME' before you can use forkexec";
+        p.error( "You must set environment variable 'FE_HOME' before you can use forkexec" )
         sys.exit(1);
-
+    
+    # reverse and copy the arguments for simpler handling.
     args = list(sys.argv[1:]);
     args.reverse();
     
@@ -265,185 +220,11 @@ def main():
     try:
         h = HomeDir(home);
     except ForkExecException, e:
-        print str(e);
+        print( str(e) )
         sys.exit(1);
-    
-    if command in CMD_START:
-        cmd_start(h, args);
-    elif command in CMD_STOP:
-        cmd_stop(h, args);
-    elif command in CMD_RESTART:
-        cmd_restart(h, args);
-    elif command in CMD_CHECK:
-        cmd_check(h, args);
-    elif command in CMD_INFO:
-        cmd_info(h, args);
-    elif command in CMD_LIST:
-        cmd_list(h, args);
-    elif command in CMD_CLEAN:
-        cmd_clean(h, args);
-    elif command in CMD_ALIAS:
-        cmd_alias(h, args);
-    else:
-        print ""
-        print "Author: John-John Tedro <johnjohn.tedro@gmail.com>"
-        print "License: GPLv3"
-        print ""
-        print "Usage: fex <command>"
-        print ""
-        print "Valid <command>s are:"
-        print "    start <process> <id> [alias] - start a new process"
-        print "    stop <id>                    - kill a running process"
-        print "    restart <id>                 - restart a running process"
-        print "    alias <id> <alias>           - set the alias of a running process"
-        print "    ls                           - list running processes and their aliases"
-        print "    info <id>                    - display info about a running process"
-        print ""
-        print "<id> can always be substituted for <alias>, if the process has any"
-        print "<process> must be an executable under $FE_HOME/init/<process>"
-        print ""
-        print "Many of the commands have shorter and/or alternative versions:"
-        print "    start - x"
-        print "    stop  - shutdown, s"
-        print "    restart - <none>"
-        print ""
-    
-    sys.exit(0);
 
-def cmd_start(h, args):
-    if len(args) > 0:
-        id = args.pop();
-    else:
-        sys.exit(1);
+    if m.COMMANDS.has_key( command ):
+        return m.COMMANDS[command](p, h, args);
     
-    if len(args) > 0:
-        alias = args.pop();
-    else:
-        alias = None;
-
-    if not os.path.isfile(h.inits(id)):
-        print "%s: %s"%(h.inits(id), "does not exist, create it if you want to run the specific process")
-        sys.exit(1);
-    
-    print "Starting:", id
-    MonitorDaemon(h, [id, alias], daemonize=True).start();
-
-def cmd_check(h, args):
-    if len(args) > 0:
-        id = args.pop();
-    else:
-        sys.exit(1);
-    
-    m = Monitor(h, id);
-    
-    if not m.send(commands.Touch()):
-        print "Unable to touch, cleaning id:", id
-        h.clean(id);
-
-def cmd_stop(h, args):
-    i=0;
-    while len(args) > 0:
-        i += 1;
-        id = args.pop();
-
-        if not h.exists(id):
-            print "Does not exist (ignoring):", id
-            continue;
-        
-        print "Shutting down:", id
-        m = Monitor(h, id);
-        if not m.send(commands.Shutdown()):
-            print "Unable to shutdown, cleaning id:", id
-            h.clean(id);
-    
-    if i == 0:
-        print "No processes stopped"
-
-def cmd_restart(h, args):
-    i=0;
-    while len(args) > 0:
-        i += 1;
-        id = args.pop();
-
-        if not h.exists(id):
-            print "Does not exist (ignoring):", id
-            continue;
-        
-        print "Restarting:", id
-        m = Monitor(h, id);
-        if not m.send(commands.Restart()):
-            print "Unable to restart, cleaning id:", id
-            h.clean(id);
-    
-    if i == 0:
-        print "No processes restarted"
-
-def cmd_info(h, args):
-    if len(args) > 0:
-        id = args.pop();
-    else:
-        sys.exit(1);
-    
-    m = Monitor(h, id);
-    r = m.communicate(commands.Info());
-    
-    if r:
-        print "init:    %s"%( h.inits( r.init ) )
-        print "pid:     %s"%( r.pid );
-        print "running: %s"%( get_time( r.started ) )
-    else:
-        print "Unable to get pid";
-
-def cmd_list(h, args):
-    if not os.path.isdir(h.run()):
-        return;
-    
-    i = 0;
-    for f in os.listdir(h.run()):
-        i += 1;
-        
-        path = h.run(f);
-        
-        if os.path.islink(path):
-            print "%s -> %s"%(f, os.path.basename(os.readlink(path)))
-        else:
-            print f
-
-    if i == 0:
-        print "No running processes";
-
-def cmd_clean(h, args):
-    i = 0;
-    for f in os.listdir(h.run()):
-        i += 1;
-        
-        m = Monitor(h, f);
-        r = m.communicate(commands.Ping());
-        
-        if r and isinstance(r, commands.Pong):
-            print "Got Pong:", f
-            continue;
-        
-        print "Timeout, removing:", f
-        h.clean(f);
-    
-    if i == 0:
-        print "Nothing to clean"
-
-def cmd_alias(h, args):
-    if len(args) < 2:
-        return;
-
-    id = args.pop();
-    alias = args.pop();
-
-    if not h.exists(id):
-        print "Id does not exist:", id
-        return;
-    
-    m = Monitor(h, id);
-    
-    if m.send(commands.Alias(alias)):
-        print "Alias command sent:", id
-    else:
-        print "Unable to set alias:", id
+    m.print_help(p);
+    return 1;
