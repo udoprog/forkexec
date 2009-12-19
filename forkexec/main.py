@@ -3,14 +3,14 @@ from forkexec.daemonize import Daemon
 
 import forkexec.commands as commands
 
-LIST="list"
-START="start"
-STOP="stop"
-RESTART="restart"
-CHECK="check"
-CLEAN="clean"
-ALIAS="alias"
-INFO="info"
+LIST=0x1
+START=0x2
+STOP=0x3
+RESTART=0x4
+CHECK=0x5
+CLEAN=0x6
+ALIAS=0x7
+INFO=0x8
 
 class ConsolePrinter:
     def info(self, *texts):
@@ -146,18 +146,6 @@ def c_start(p, h, args):
     
     p.info( "Starting:", id )
     MonitorDaemon(h, [id, alias], daemonize=True).start();
-
-def c_check(p, h, args):
-    if len(args) > 0:
-        id = args.pop();
-    else:
-        return 1;
-    
-    m = Monitor(h, id);
-    
-    if not m.send(commands.Touch()):
-        p.info( "Unable to touch, cleaning id:", id )
-        h.clean(id);
 
 def c_stop(p, h, args):
     i=0;
@@ -297,8 +285,17 @@ COMMANDS={
   START: c_start,
   STOP: c_stop,
   RESTART: c_restart,
-  CHECK: c_check,
   CLEAN: c_clean,
   ALIAS: c_alias,
   INFO: c_info
+};
+
+NAMES={
+  LIST: ["list", "ls"],
+  START: ["start", "run", "execute"],
+  STOP: ["stop", "shutdown"],
+  RESTART: ["restart"],
+  CLEAN: ["clean", "c"],
+  ALIAS: ["alias"],
+  INFO: ["info", "nfo"]
 };

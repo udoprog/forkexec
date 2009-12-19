@@ -223,8 +223,9 @@ def main():
         print( str(e) )
         sys.exit(1);
 
-    if m.COMMANDS.has_key( command ):
-        return m.COMMANDS[command](p, h, args);
+    for k, aliases in m.NAMES.items():
+        if command in aliases:
+            return m.COMMANDS[k](p, h, args);
     
     m.print_help(p);
     return 1;
