@@ -76,6 +76,8 @@ class Touch(MonitorCommand):
     FILENAME="touch";
 
 class Shutdown(MonitorCommand):
+    attr_list = ["type"];
+    
     KILL="kill";
     TERM="term";
     INIT="init";

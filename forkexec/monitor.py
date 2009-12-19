@@ -272,7 +272,7 @@ class Monitor:
         self.log("Spawning new process");
         
         if self.spawn():
-            self.running = time.time();
+            self.started = time.time();
             self.log("Process spawned");
         else:
             self.log("Failed to spawn process");

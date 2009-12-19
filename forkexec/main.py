@@ -5,7 +5,7 @@ import forkexec.commands as commands
 
 LIST="list"
 START="start"
-STOP="shutdown"
+STOP="stop"
 RESTART="restart"
 CHECK="check"
 CLEAN="clean"
