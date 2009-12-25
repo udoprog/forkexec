@@ -6,6 +6,7 @@ forkexec/commands.py
 forkexec/daemonize.py
 forkexec/main.py
 forkexec/monitor.py
+forkexec/workdir.py
 forkexec.egg-info/PKG-INFO
 forkexec.egg-info/SOURCES.txt
 forkexec.egg-info/dependency_links.txt

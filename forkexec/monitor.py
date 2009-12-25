@@ -20,79 +20,62 @@
 import sys
 import os
 import subprocess
-import uuid
 import datetime
 import time
 
 import setproctitle
 
 from forkexec.commands import *
+from forkexec.workdir import Session
 
 import threading
-class TimeoutSender(threading.Thread):
-    def __init__(self, monitor, command):
-        threading.Thread.__init__(self);
-        self.monitor = monitor;
-        self.command = command;
-        self.error = None;
+
+class TimeoutWorker(threading.Thread):
+    def __init__(self, func, *args, **kw):
+        threading.Thread.__init__(self);        
+        
+        self.func = func;
+        self.args = args;
+        self.kw = kw;
+        self.exception = None;
+        self.exc_info = None;
+        self.ret = None;
     
     def run(self):
+        import sys;
+        
         try:
-            f = self.monitor.home.open_fifo(self.monitor.id, "w");
-            
-            if not f:
-                return;
-            
-            try:
-                f.write(self.command.to_json());
-            finally:
-                f.close();
+            self.ret = self.func(*self.args, **self.kw);
         except Exception, e:
-            self.error = e;
+            self.exception = e;
+            self.exc_info = sys.exc_info();
+        
+        return;
 
-class TimeoutReader(threading.Thread):
-    def __init__(self, monitor, id):
-        threading.Thread.__init__(self);
-        self.monitor = monitor;
-        self.result = None;
-        self.error = None;
-        self.id = id;
+def timeout(ms, func, *args, **kw):
+    w = TimeoutWorker(func, *args, **kw);
+    w.start();
+    w.join(ms);
     
-    def run(self):
-        try:
-            f = self.monitor.home.open_fifo(self.id, "r");
-
-            if not f:
-                return;
-            
-            r = dict();
-            
-            try:
-                self.result = MonitorCommand.from_json(f.read());
-            finally:
-                f.close();
-        except Exception, e:
-            self.error = e;
-
-class LogWrapper:
-    def __init__(self, prefix, monitor):
-        self.prefix = prefix;
-        self.monitor = monitor;
+    if w.isAlive():
+        del w;
+        return None;
     
-    def write(self, str):
-        self.monitor.log("%s - %s"%(self.prefix, str));
+    if w.exception is not None:
+        raise w.exc_info[1], None, w.exc_info[2];
+    
+    return w.ret;
 
 class Monitor:
     """
     Internal monitor class for handling the process state.
     """
     
-    def __init__(self, home, id, init=None, alias=None):
-        self.pid = None;
-        
+    def __init__(self, home, id=None, init=None):
         self.home = home;
-        self.id = id;
-        self.alias = alias;
+        
+        # if id is specified, this is a client monitor.
+        self.session = Session( home, id );
         self.init = init;
         
         self.sp = None;
@@ -106,17 +89,13 @@ class Monitor:
         #sys.stderr = LogWrapper("STDERR", self);
     
     def open_log(self):
-        bestname = self.id;
-        
-        if self.alias:
-            bestname = self.alias;
-        
+        bestname = self.session.id;
         return self.home.open_log( "%s.log"%( bestname ) )
     
     def log(self, *items):
         d_now = str( datetime.datetime.now() );
         
-        self.log_fd.write( "%s %s: %s\n"%( self.id, d_now, " ".join([str(i) for i in items]) ) );
+        self.log_fd.write( "%s %s: %s\n"%( self.session.id, d_now, " ".join([str(i) for i in items]) ) );
         self.log_fd.flush();
     
     def run(self):
@@ -124,16 +103,13 @@ class Monitor:
         Wait for all child processes to die.
         """
         self.running = True;
-        self._prepare_channels();
-
+        self.session.create();
+        
         self.log("Monitor Running");
-
+        
         while self.running:
-            f = self.home.open_fifo(self.id, "r");
-            
             try:
-                s = f.read();
-                c = MonitorCommand.from_json( s );
+                c = MonitorCommand.from_json( self.session.recv() );
                 
                 if not c:
                     self.log( "Got bad command:", repr(s) );
@@ -142,8 +118,6 @@ class Monitor:
             except Exception, e:
                 import traceback
                 self.log( "Exc:", traceback.format_exc() );
-            finally:
-                f.close();
             
             if not self._check_process():
                 self.log("Child exited with returncode:", self.sp.returncode);
@@ -163,13 +137,6 @@ class Monitor:
         
         return True;
     
-    def _prepare_channels(self):
-        self.home.validate_fifo(self.id);
-        
-        if self.alias:
-            self.log("Creating alias:", self.alias);
-            self.home.validate_alias(self.id, self.alias);
-    
     def stop(self):
         self.sp = None;
         self.running = False;
@@ -179,21 +146,12 @@ class Monitor:
           self.sp.kill();
           self.sp.wait();
         
-        fifo = self.home.run(self.id);
+        self.session.destroy();
         
-        self.home.clean(self.id);
-        
-        if self.alias:
-            self.home.delete_alias(self.alias);
-    
     def _handle_reception(self, c):
         if not isinstance(c, MonitorCommand):
             self.log("Received Garbled message");
             return;
-        
-        if isinstance(c, Alias):
-            self.log("Got alias command");
-            self._cmd_alias(c)
         
         elif isinstance(c, Touch):
             self.log("Got touch command");
@@ -230,39 +188,23 @@ class Monitor:
             self._stop_init();
 
     def _stop_init(self):
+        if not self._check_process():
+            self.log.info( "Process not running, cannot stop" );
+            return;
+        
         # start the process that shuts down the child process.
-        stop_p = subprocess.Popen([self.home.inits(self.init), "stop", self.pid])
+        stop_p = subprocess.Popen([self.home.get_init(self.init).path, "stop", self.sp.pid])
         # wait for process to finish (guarantee return code)
         stop_p.wait();
         
         if stop_p.returncode == 0 and self.sp.returncode != None:
             self.stop();
         else:
-            self.log( "%s: did not return zero, or child process is not dead - not shutting down"%( self.home.inits(self.init) ) );
-    
-    def _cmd_alias(self, command):
-        # remove old alias.
-        if self.alias:
-            self.home.delete_alias(self.alias);
-
-        self.alias = command.alias;
-        
-        self.home.validate_alias(self.id, self.alias);
-    
-    def _cmd_touch(self):
-        tp = self.home.path(Touch.FILENAME)
-        
-        ft = open(tp, "a");
-        ft.write("touched at %s by %s\n"%(datetime.datetime.now(), self.id));
-        ft.close();
+            self.log( "%s: did not return zero, or child process is not dead - not shutting down"%( self.home.get_init(self.init).path ) );
     
     def _cmd_info(self, c):
-        f = self.home.open_fifo(c.id, "w");
-        
-        response = InfoResponse(self.pid, time.time() - self.started, self.init)
-        
-        f.write(response.to_json());
-        f.close();
+        if self.send( InfoResponse(self.session.id, self.sp.pid, time.time() - self.started, self.init) ):
+            self.log( "Unable to send info response" );
     
     def _cmd_restart(self, c):
         self.log("Killing process");
@@ -283,68 +225,29 @@ class Monitor:
         self.sp.send_signal(c.signal);
     
     def _cmd_ping(self, c):
-        f = self.home.open_fifo(c.id, "w");
-        
-        try:
-            f.write(Pong().to_json());
-        finally:
-            f.close();
+        if self.send( Pong() ):
+            self.log( "Unable to send pong" );
     
-    def send(self, command, timeout=1):
-        import threading;
+    def send( self, command, t=1 ):
+        def sender(session, command):
+            return session.send( command.to_json() );
         
-        sending = TimeoutSender(self, command);
-        sending.start();
-        sending.join(timeout);
-        
-        if sending.isAlive():
-            return False;
-        
-        if sending.error is not None:
-            print str(sending.error);
-            return False;
-        
-        return True;
+        return timeout( t, sender, self.session, command );
     
-    def receive(self, uid, timeout=1):
-        reading = TimeoutReader(self, uid);
-        reading.start();
-        reading.join(timeout);
+    def receive( self, t=1 ):
+        def receiver( session ):
+            return MonitorCommand.from_json( session.recv() );
         
-        if reading.isAlive():
-            return None;
-        
-        if reading.error is not None:
-            print str(reading.error);
-            return False;
-        
-        return reading.result;
-
+        return timeout( t, receiver, self.session );
+    
     def communicate(self, command, timeout=1):
         """
         communicate creates a temporary response channel (fifo)
         that the monitor can use to return any command.
         """
         
-        # create a temporary response channel
-        if not isinstance(command, MonitorCommand):
-            return None;
-        
-        uid = str(uuid.uuid1());
-        path = self.home.run(uid)
-
-        command.id = uid;
-        
-        try:
-            os.mkfifo(path);
-        except OSError, e:
-            return None;
-        
-        try:
-            if self.send(command, timeout):
-                return self.receive(uid, timeout);
-        finally:
-            os.unlink(path);
+        if self.send(command, timeout):
+            return self.receive(timeout);
         
         return None;
     
@@ -353,12 +256,11 @@ class Monitor:
         Spawn a child whereas the happy monitor will keep running having the child's pid in posession.
         """
 
-        if not os.path.exists(self.home.inits(self.init)):
+        if not self.home.get_init( self.init ).exists():
             self.log("Init does not exist:", self.init);
             return False;
         
-        self.sp = subprocess.Popen([self.home.inits(self.init), "start"])
-        self.pid = self.sp.pid;
+        self.sp = subprocess.Popen([self.home.get_init(self.init).path, "start"])
         
         # poll for new returncode.
         self.sp.poll();
@@ -374,4 +276,4 @@ class Monitor:
         """
         set the process title for the monitor process.
         """
-        setproctitle.setproctitle( "forkexec: Monitor Process (%s)"%(str(self.id)) );
+        setproctitle.setproctitle( "forkexec: Monitor Process (%s)"%(str(self.session.id)) );

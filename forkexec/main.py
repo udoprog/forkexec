@@ -47,12 +47,9 @@ class MonitorDaemon(Daemon):
         import signal
 
         init = self.args[0];
-        alias = self.args[1];
         
-        self.m = Monitor(self.home, self.id, init=init, alias=alias);
+        self.m = Monitor( self.home, init=init );
         
-        #signal.signal(signal.SIGHUP, self.signal_handler)
-
         if not self.m.spawn():
             self.m.shutdown();
             sys.exit(1);
@@ -109,14 +106,12 @@ def print_help(p):
     p.info( "Usage: fex <command>" )
     p.info( "" )
     p.info( "Valid <command>s are:" )
-    p.info( "    start <process> <id> [alias] - start a new process" )
-    p.info( "    stop <id>                    - kill a running process" )
-    p.info( "    restart <id>                 - restart a running process" )
-    p.info( "    alias <id> <alias>           - set the alias of a running process" )
-    p.info( "    ls                           - list running processes and their aliases" )
-    p.info( "    info <id>                    - display info about a running process" )
+    p.info( "    start <process> <id> - start a new process" )
+    p.info( "    stop <id>            - kill a running process" )
+    p.info( "    restart <id>         - restart a running process" )
+    p.info( "    ls                   - list running processes" )
+    p.info( "    info <id>            - display info about a running process" )
     p.info( "" )
-    p.info( "<id> can always be substituted for <alias>, if the process has any" )
     p.info( "<id> can also be just the first letters of a long id if there is only a single match" );
     p.info( "<process> must be an executable under $FE_HOME/init/<process>" )
     p.info( "" )
@@ -125,6 +120,23 @@ def print_help(p):
     p.info( "    stop  - shutdown, s" )
     p.info( "    restart - <none>" )
     p.info( "" )
+
+def match_one_running(p, h, id):
+    r = h.select_runs(id);
+    
+    if len(r) <= 0:
+        p.info( "No match:", id );
+        return None;
+    
+    if len(r) > 1:
+        p.info( "Too many matches:", id );
+    
+        for i in r:
+            p.format( "(?)?", id, i[len(id):] )
+        
+        return None;
+    
+    return r[0];
     
 def c_start(p, h, args):
     import os;
@@ -134,27 +146,23 @@ def c_start(p, h, args):
     else:
         return 1;
     
-    if len(args) > 0:
-        alias = args.pop();
-    else:
-        alias = None;
-    
-    if not h.isinit(id):
+    if not h.get_init( id ).exists():
         p.error( "" );
-        p.format( "?: ?", h.inits(id), "File does not exist, create it if you want to run the specific process" );
+        p.format( "?: ?", h.get_init(id).path, "File does not exist, create it if you want to run the specific process" );
         return 1;
     
     p.info( "Starting:", id )
-    MonitorDaemon(h, [id, alias], daemonize=True).start();
+    MonitorDaemon(h, [id], daemonize=False).start();
 
 def c_stop(p, h, args):
-    i=0;
+    if len(args) == 0:
+        p.info( "No processes stopped" )
+        return 1;
+    
     while len(args) > 0:
-        i += 1;
-        id = args.pop();
-
-        if not h.exists(id):
-            p.info( "Does not exist (ignoring):", id )
+        id = match_one_running( p, h, args.pop() );
+        
+        if not id:
             continue;
         
         p.info( "Shutting down:", id )
@@ -162,48 +170,39 @@ def c_stop(p, h, args):
         if not m.send(commands.Shutdown(commands.Shutdown.KILL)):
             p.info( "Unable to shutdown, cleaning id:", id )
             h.clean(id);
-    
-    if i == 0:
-        p.info( "No processes stopped" )
 
 def c_restart(p, h, args):
-    i=0;
-    while len(args) > 0:
-        i += 1;
-        id = args.pop();
+    if len(args) == 0:
+        p.info( "No processes restarted" )
+        return 1;
 
-        if not h.exists(id):
-            p.info( "Does not exist (ignoring):", id )
+    while len(args) > 0:
+        id = match_one_running( p, h, args.pop() );
+
+        if not id:
             continue;
         
         p.info( "Restarting:", id )
         m = Monitor(h, id);
-        if not m.send(commands.Restart()):
+        if not m.send( commands.Restart() ):
             p.info( "Unable to restart, cleaning id:", id )
             h.clean(id);
     
-    if i == 0:
-        p.info( "No processes restarted" )
-
 def c_info(p, h, args):
-    if len(args) > 0:
-        id = args.pop();
-    else:
+    if len(args) == 0:
         return 1;
     
-    r = h.select_runs(id);
-    
-    if len(r) == 0:
-        p.error( "No matching run fifos" );
-        return;
-    
-    id = r[0];
+    id = match_one_running( p, h, args.pop() );
+
+    if not id:
+        return 1;
     
     m = Monitor(h, id);
     result = m.communicate(commands.Info());
     
     if result:
-        p.format("init:    ?", h.inits( result.init ) );
+        p.format("id:      ?", result.id );
+        p.format("init:    ?", h.get_init( result.init ).path );
         p.format("pid:     ?", result.pid );
         p.format("running: ?", get_time( result.started ) );
     else:
@@ -220,10 +219,10 @@ def c_list(p, h, args):
     r = h.select_runs(id);
     
     for f in r:
-        path = h.run(f);
+        state = h.get_state(f);
         
-        if os.path.islink(path):
-            p.format( "? -> ?", f, os.path.basename( os.readlink(path) ) )
+        if os.path.islink(state.path):
+            p.format( "? -> ?", f, os.path.basename( os.readlink(state.path) ) )
         else:
             p.info( f )
     
@@ -245,40 +244,10 @@ def c_clean(p, h, args):
             continue;
         
         p.info( "Timeout, removing:", f )
-        h.clean(f);
+        m.shutdown();
     
     if len(r) == 0:
         p.info( "Nothing to clean" )
-
-def c_alias(p, h, args):
-    if len(args) < 2:
-        return;
-
-    id = args.pop();
-    alias = args.pop();
-    
-    r = h.select_runs(id);
-    
-    if len(r) == 0:
-        p.info( "Id does not match any existing:", id )
-        return;
-
-    if len(r) != 1:
-        p.info( "Id matches too many:", id )
-        
-        for i in r:
-            p.format( "(?)?", id, i[len(id):] )
-        
-        return;
-    
-    id = r.pop();
-    
-    m = Monitor( h, id );
-    
-    if m.send(commands.Alias(alias)):
-        p.info( "Alias command sent:", id )
-    else:
-        p.info( "Unable to set alias:", id )
 
 COMMANDS={
   LIST: c_list,
@@ -286,7 +255,6 @@ COMMANDS={
   STOP: c_stop,
   RESTART: c_restart,
   CLEAN: c_clean,
-  ALIAS: c_alias,
   INFO: c_info
 };
 
@@ -296,6 +264,5 @@ NAMES={
   STOP: ["stop", "shutdown"],
   RESTART: ["restart"],
   CLEAN: ["clean", "c"],
-  ALIAS: ["alias"],
   INFO: ["info", "nfo"]
 };

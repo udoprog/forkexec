@@ -25,21 +25,16 @@ class MonitorCommand(object):
     attr_list = list();
     id = 0;
     
-    def __init__(self, id=None):
-        self.id = id;
-    
     def get_attributes(self):
         h = dict();
         
         for a in self.attr_list:
             h[a] = getattr(self, a);
         
-        h["__id__"] = self.id;
         h["__name__"] = self.__class__.__name__
         return h;
     
     def set_attributes(self, h):
-        self.id = h.get("__id__", None);
         h.pop("__name__", None)
         
         for a in h.keys():
@@ -50,6 +45,9 @@ class MonitorCommand(object):
     
     @classmethod
     def from_json(klass, json_s):
+        if not json_s:
+            return None;
+        
         h = json.loads(json_s);
         
         name = h.pop("__name__", None);
@@ -66,7 +64,7 @@ class MonitorCommand(object):
         
         if not cls:
             return None;
-
+        
         cls_i = cls();
         cls_i.set_attributes(h);
         return cls_i;
@@ -98,9 +96,10 @@ class Info(MonitorCommand):
     pass;
 
 class InfoResponse(MonitorCommand):
-    attr_list = ["pid", "started", "init"];
+    attr_list = ["id", "pid", "started", "init"];
     
-    def __init__(self, pid = None, started = None, init = None):
+    def __init__(self, id = None, pid = None, started = None, init = None):
+        self.id = id;
         self.pid = pid;
         self.started = started;
         self.init = init;
