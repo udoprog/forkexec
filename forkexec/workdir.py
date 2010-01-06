@@ -210,31 +210,35 @@ class WorkDir:
     
     def get_file( self, *parts ):
         return File( self.get_path( *parts ) )
-    
-    def select_runs(self, id_hint=None):
+
+    def select_file( self, dir, hint = None ):
         """
-        Select a subset of run entries from directory, if any starts with id_hint.
+        Select a subset of entries from a directory, if any starts with hint.
         If there is a perfect match, only return that one no matter what.
         """
         result = list();
         
-        dir = self.get_path( self.RUNNING );
+        dir = self.get_path( dir );
         
         for f in os.listdir( dir ):
-            path = os.path.join( self.RUNNING);
-            
-            if not id_hint:
+            if not hint:
                 result.append(f);
                 continue;
             
-            if f == id_hint:
-                return [f];
+            if f == hint:
+                return [ f ];
             
-            if f.startswith(id_hint):
-                result.append(f);
+            if f.startswith( hint ):
+                result.append( f );
                 continue;
         
         return result;
+    
+    def select_runs(self, id_hint=None):
+        return self.select_file( self.RUNNING );
+    
+    def select_inits( self, id_hint=None ):
+        return self.select_file( self.INIT );
     
     def open_log(self, logname):
         path = self.get_path(self.LOGS, logname);

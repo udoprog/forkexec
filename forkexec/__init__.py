@@ -64,10 +64,45 @@ def main():
         print( str(e) )
         sys.exit(1);
     
-    # try to match command with alias.
-    for k, aliases in m.NAMES.items():
-        if command in aliases:
-            return m.COMMANDS[k]( p, h, args );
+    command_parts = command.split("-");
     
-    m.print_help( p );
-    return 1;
+    # try to match command with alias.
+    matching_aliases = list();
+    
+    for k, aliases in m.NAMES.items():
+        for alias in aliases:
+            alias_parts = alias.split("-");
+            
+            match = True;
+            
+            for i in range(len(command_parts)):
+                if not alias_parts[i].startswith(command_parts[i]):
+                    match = False;
+                    break;
+            
+            # if there already is a similar match in list, skip current.
+            for m_a, m_k in matching_aliases:
+                if m_k == k:
+                    match = False;
+            
+            if not match:
+                continue;
+            
+            matching_aliases.append( (alias, k) );
+
+    if len(matching_aliases) == 0:
+        p.error( "No commands matching", command );
+        m.print_help( p );
+        return 1;
+    
+    if len(matching_aliases) > 1:
+        p.error( "Too many commands matching", command );
+        
+        for c in matching_aliases:        
+            p.error( c[0] );
+        
+        return 1;
+    
+    matched_alias = matching_aliases.pop();
+    
+    return m.COMMANDS[matched_alias[1]]( p, h, args );

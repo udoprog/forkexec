@@ -3,19 +3,10 @@ from forkexec.daemonize import Daemon
 
 import forkexec.commands as commands
 
-LIST=0x1
-START=0x2
-STOP=0x3
-RESTART=0x4
-CHECK=0x5
-CLEAN=0x6
-ALIAS=0x7
-INFO=0x8
-
 class ConsolePrinter:
     def info(self, *texts):
         print ' '.join([str(s) for s in texts]);
-
+    
     def error(self, *texts):
         self.info(*texts);
     
@@ -139,20 +130,30 @@ def match_one_running(p, h, id):
     return r[0];
     
 def c_start(p, h, args):
-    import os;
+    id = None;
 
     if len(args) > 0:
         id = args.pop();
-    else:
+    
+    r = h.select_inits(id);
+    
+    if len(r) == 0:
+        p.info( "No matching init files" )
         return 1;
     
-    if not h.get_init( id ).exists():
-        p.error( "" );
-        p.format( "?: ?", h.get_init(id).path, "File does not exist, create it if you want to run the specific process" );
+    if len(r) > 1:
+        if id is not None:
+          p.info( "Cannot start, please match only one init file:" )
+        
+        for f in r:
+            p.info( f );
+
         return 1;
     
-    p.info( "Starting:", id )
-    MonitorDaemon(h, [id], daemonize=False).start();
+    match = r.pop();
+    
+    p.info( "Starting:", match )
+    MonitorDaemon(h, [match], daemonize=True).start();
 
 def c_stop(p, h, args):
     if len(args) == 0:
@@ -208,11 +209,11 @@ def c_info(p, h, args):
     else:
         p.info( "Unable to get info" )
 
-def c_list(p, h, args):
+def c_running(p, h, args):
     import os;
-
-    id = None;
     
+    id = None;
+
     if len(args) > 0:
         id = args.pop();
     
@@ -228,6 +229,23 @@ def c_list(p, h, args):
     
     if len(r) == 0:
         p.info( "No running processes" )
+
+def c_init(p, h, args):
+    id = None;
+
+    if len(args) > 0:
+        id = args.pop();
+    
+    r = h.select_inits(id);
+    
+    if len(r) == 0:
+        p.info( "No matching init files" )
+    else:
+        if id is not None:
+          p.info( "Matching inits:" )
+        
+        for f in r:
+            p.info( f );
 
 def c_clean(p, h, args):
     if len(args) > 0:
@@ -249,8 +267,19 @@ def c_clean(p, h, args):
     if len(r) == 0:
         p.info( "Nothing to clean" )
 
+RUNNING=0x1
+INIT=0x2
+START=0x3
+STOP=0x5
+RESTART=0x6
+CHECK=0x7
+CLEAN=0x8
+ALIAS=0x9
+INFO=0xa
+
 COMMANDS={
-  LIST: c_list,
+  RUNNING: c_running,
+  INIT: c_init,
   START: c_start,
   STOP: c_stop,
   RESTART: c_restart,
@@ -259,10 +288,11 @@ COMMANDS={
 };
 
 NAMES={
-  LIST: ["list", "ls"],
-  START: ["start", "run", "execute"],
-  STOP: ["stop", "shutdown"],
+  RUNNING: ["ls-run", "list-run"],
+  INIT: ["ls-init", "list-init"],
+  START: ["start"],
+  STOP: ["stop"],
   RESTART: ["restart"],
-  CLEAN: ["clean", "c"],
+  CLEAN: ["clean"],
   INFO: ["info", "nfo"]
 };
