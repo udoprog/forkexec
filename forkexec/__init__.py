@@ -72,11 +72,14 @@ def main():
     for k, aliases in m.NAMES.items():
         for alias in aliases:
             alias_parts = alias.split("-");
+
+            if len(alias_parts) < len(command_parts):
+                continue;
             
             match = True;
             
-            for i in range(len(command_parts)):
-                if not alias_parts[i].startswith(command_parts[i]):
+            for a_part, c_part in zip( alias_parts, command_parts ):
+                if not a_part.startswith(c_part):
                     match = False;
                     break;
             

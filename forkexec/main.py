@@ -97,19 +97,21 @@ def print_help(p):
     p.info( "Usage: fex <command>" )
     p.info( "" )
     p.info( "Valid <command>s are:" )
-    p.info( "    start <process> <id> - start a new process" )
+    p.info( "    start <process>      - start a new process" )
     p.info( "    stop <id>            - kill a running process" )
     p.info( "    restart <id>         - restart a running process" )
-    p.info( "    ls                   - list running processes" )
+    p.info( "    ls-run <id>          - list running processes" )
+    p.info( "    ls-init <process>    - list available init processes" )
     p.info( "    info <id>            - display info about a running process" )
     p.info( "" )
     p.info( "<id> can also be just the first letters of a long id if there is only a single match" );
     p.info( "<process> must be an executable under $FE_HOME/init/<process>" )
     p.info( "" )
-    p.info( "Many of the commands have shorter and/or alternative versions:" )
-    p.info( "    start - x" )
-    p.info( "    stop  - shutdown, s" )
-    p.info( "    restart - <none>" )
+    p.info( "Commands can be matched using '-' as a delimiter, and closest possible match:" )
+    p.info( "    'l-r' equals list-run (or ls-run)" )
+    p.info( "    'l-i' equals list-init (or ls-init)" )
+    p.info( "" )
+    p.info( "Multiple matches like 's' will give an error" )
     p.info( "" )
 
 def match_one_running(p, h, id):
@@ -288,8 +290,8 @@ COMMANDS={
 };
 
 NAMES={
-  RUNNING: ["ls-run", "list-run"],
-  INIT: ["ls-init", "list-init"],
+  RUNNING: ["ls-run", "list-run", "lr"],
+  INIT: ["ls-init", "list-init", "li"],
   START: ["start"],
   STOP: ["stop"],
   RESTART: ["restart"],
