@@ -42,7 +42,7 @@ class MonitorDaemon(Daemon):
         self.m = Monitor( self.home, init=init );
         
         if not self.m.spawn():
-            self.m.shutdown();
+            self.m.remove();
             sys.exit(1);
         
         try:
@@ -51,8 +51,6 @@ class MonitorDaemon(Daemon):
             import traceback
             self.m.log(traceback.format_exc());
         
-        self.m.shutdown();
-    
     #def signal_handler(self, signal, frame):
     #    self.m.shutdown();
     #    sys.exit(0);
@@ -170,9 +168,9 @@ def c_stop(p, h, args):
         
         p.info( "Shutting down:", id )
         m = Monitor(h, id);
-        if not m.send(commands.Shutdown(commands.Shutdown.KILL)):
+        if not m.send( commands.Shutdown( commands.Shutdown.TERM ) ):
             p.info( "Unable to shutdown, cleaning id:", id )
-            h.clean(id);
+            m.clean();
 
 def c_restart(p, h, args):
     if len(args) == 0:
@@ -264,7 +262,7 @@ def c_clean(p, h, args):
             continue;
         
         p.info( "Timeout, removing:", f )
-        m.shutdown();
+        m.remove();
     
     if len(r) == 0:
         p.info( "Nothing to clean" )

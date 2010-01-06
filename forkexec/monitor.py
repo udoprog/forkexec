@@ -124,6 +124,7 @@ class Monitor:
                 self.log("Initiating shutdown");
                 self.stop();
         
+        self.session.destroy();
         self.log("Monitor Shutting Down");
 
     def _check_process(self):
@@ -141,13 +142,6 @@ class Monitor:
         self.sp = None;
         self.running = False;
     
-    def shutdown(self):
-        if self.sp:
-          self.sp.kill();
-          self.sp.wait();
-        
-        self.session.destroy();
-        
     def _handle_reception(self, c):
         if not isinstance(c, MonitorCommand):
             self.log("Received Garbled message");
@@ -177,16 +171,33 @@ class Monitor:
             self.log("Got restart");
             self._cmd_restart(c)
     
+    def remove( self ):
+        """
+        Remove all session related stuff.
+        """
+        self.session.destroy();
+    
     def _cmd_stop(self, command):
         if command.type == command.KILL:
+            self.log("Sending kill signal");
             self.sp.kill();
-            self.stop();
         elif command.type == command.TERM:
+            self.log("Sending terminate signal");
             self.sp.terminate();
-            self.stop();
         elif command.type == command.INIT:
+            self.log("Running shutdown process");
             self._stop_init();
-
+        
+        self.log("Closing file descriptors to child process");
+        
+        self.sp.stdin.close();
+        self.sp.stdout.close();
+        self.sp.stderr.close();
+        
+        self.log("Waiting for child process to give up and die already");
+        
+        self.sp.wait();
+    
     def _stop_init(self):
         if not self._check_process():
             self.log.info( "Process not running, cannot stop" );
@@ -196,20 +207,14 @@ class Monitor:
         stop_p = subprocess.Popen([self.home.get_init(self.init).path, "stop", self.sp.pid])
         # wait for process to finish (guarantee return code)
         stop_p.wait();
-        
-        if stop_p.returncode == 0 and self.sp.returncode != None:
-            self.stop();
-        else:
-            self.log( "%s: did not return zero, or child process is not dead - not shutting down"%( self.home.get_init(self.init).path ) );
     
     def _cmd_info(self, c):
         if self.send( InfoResponse(self.session.id, self.sp.pid, time.time() - self.started, self.init) ):
             self.log( "Unable to send info response" );
     
     def _cmd_restart(self, c):
-        self.log("Killing process");
-        self.sp.kill();
-        self.sp.wait();
+        self.log("Shutting down process");
+        self._cmd_stop( Shutdown() )
         
         self.log("Spawning new process");
         
@@ -260,7 +265,11 @@ class Monitor:
             self.log("Init does not exist:", self.init);
             return False;
         
-        self.sp = subprocess.Popen([self.home.get_init(self.init).path, "start"])
+        self.sp = subprocess.Popen(
+          [self.home.get_init(self.init).path, "start"],
+          stdin=subprocess.PIPE,
+          stdout=subprocess.PIPE,
+          stderr=subprocess.PIPE)
         
         # poll for new returncode.
         self.sp.poll();

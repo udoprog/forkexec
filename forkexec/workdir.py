@@ -235,10 +235,10 @@ class WorkDir:
         return result;
     
     def select_runs(self, id_hint=None):
-        return self.select_file( self.RUNNING );
+        return self.select_file( self.RUNNING, id_hint );
     
     def select_inits( self, id_hint=None ):
-        return self.select_file( self.INIT );
+        return self.select_file( self.INIT, id_hint );
     
     def open_log(self, logname):
         path = self.get_path(self.LOGS, logname);
